@@ -1,42 +1,50 @@
 import { PlatformId } from "@fightmegg/riot-rate-limiter";
 import { type NextPage } from "next";
 import Head from "next/head";
-import { type Dispatch, useReducer, useMemo, Suspense } from "react";
+import { useReducer, useMemo, Suspense } from "react";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import type { DeathDTO } from "~/server/api/routers/matches";
 
 
 import { api } from "~/utils/api";
 
+type Region = PlatformId.EUW1 | PlatformId.EUNE1 | PlatformId.NA1 | PlatformId.LA1 | PlatformId.LA2 | PlatformId.KR | PlatformId.JP1 | PlatformId.BR1 | PlatformId.OC1 | PlatformId.RU | PlatformId.TR1;
+
 interface IFormInput {
   summonerName: string;
-  region: string;
+  region: Region;
 }
 
 interface IState {
   summonerName: string,
-  region: string
+  region: Region,
+  playerId: string|null
 }
 
 enum ActionType {
-  SET_NAME
+  SEARCH,
 }
 
-interface SET_NAME {
-  type: ActionType.SET_NAME,
-  payload: string
+interface SEARCH {
+  type: ActionType.SEARCH,
+  payload: IFormInput
 }
 
-type Action = SET_NAME;
+interface Player {
+  playerId: string,
+  region: Region
+}
+
+type Action = SEARCH;
 
 function reducer(state: IState, action: Action) {
   switch (action.type) {
-    case ActionType.SET_NAME:
-      if (state.summonerName === action.payload) {
+    case ActionType.SEARCH:
+      if(state.summonerName === action.payload.summonerName && state.region === action.payload.region){
         return state;
-      } else {
-        return { ...state, summonerName: action.payload }
       }
+
+      return {...state, ...action.payload };
   }
 }
 
@@ -50,44 +58,52 @@ const Spinner = ()=>(
     </div>
 )
 
-const Display = (props: { summonerName: string, dispatch: Dispatch<Action>}) => {
-  const [data,matches] = api.matches.matches.useSuspenseQuery({username:props.summonerName,region:PlatformId.NA1});
+const Display = (props: { player: Player}) => {
+  const [matchIds, ] = api.matches.matchIds.useSuspenseQuery(props.player);
+  const matchParams = useMemo(()=>({...props.player, matchIds}),[props,matchIds])
+  const [matches, matchesQuery] = api.matches.matches.useSuspenseQuery(matchParams);
 
   const totalDeathTime = useMemo(()=>
-    ((matches.data??[]).reduce((x:number,y:DeathDTO)=>x+(y?.totalTimeSpentDead??0)/60, 0)), [matches]);
-  const totalDeaths = useMemo(()=>((matches.data??[]).reduce((x:number,y:DeathDTO)=>x+y?.deaths??0,0)),[matches])
+    ((matches??[]).reduce((x:number,y)=>x+(y?.totalTimeSpentDead??0)/60, 0)), [matches]);
+  const totalDeaths = useMemo(()=>((matches??[]).reduce((x:number,y)=>x+(y?.deaths??0),0)),[matches])
   return (<>
-    <h2 className="text-white">Total Time Dead: <span className="animate-pulse text-red-400">{totalDeathTime}</span> min</h2>
-    <h2 className="text-white">Time Per Death: <span className="animate-pulse text-red-400">{totalDeathTime/totalDeaths}</span> min</h2>
-    <h2 className="text-lg font-bold text-white">Group of matches</h2>
-    {data?
-      (<table className="table-auto border-collapse text-white text-center border-white border-spacing-2 border">
-        <thead>
-          <tr>
-          <th className="border border-slate-500 px-2">Game</th><th className="border border-slate-500 px-2">Death times</th><th className="border border-slate-500 px-2">Deaths</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data?.map((m:DeathDTO) => 
-            (<tr key={m.matchId}>
-              <td>{m.matchId}</td><td>{m.totalTimeSpentDead} s</td><td>{m.deaths}</td>
-            </tr>)
-          )}
-        </tbody>
-      </table>):
-      <p className="text-white">Missing</p>
-    }
+    <div>
+      <p className="text-white mb-0"><dfn>Total Time Dead: </dfn><output className="animate-pulse text-red-400">{totalDeathTime}</output> min</p>
+      <p className="text-white"><dfn>Average Death Length: </dfn><output className="animate-pulse text-red-400">{totalDeathTime/totalDeaths}</output> min</p>
+    </div>
+    <div>
+      <h2 className="text-lg font-bold text-white">Group of matches</h2>
+      {matchesQuery.isFetched?
+        (<table className="table-auto border-collapse text-white text-center border-white border-spacing-2 border">
+          <thead>
+            <tr>
+            <th className="border border-slate-500 px-2">Game</th><th className="border border-slate-500 px-2">Death times</th><th className="border border-slate-500 px-2">Deaths</th>
+            </tr>
+          </thead>
+          <tbody>
+            {matches?.map((m:DeathDTO) => 
+              (<tr key={m.matchId}>
+                <td>{m.matchId}</td><td>{m.totalTimeSpentDead} s</td><td>{m.deaths}</td>
+              </tr>)
+            )}
+          </tbody>
+        </table>):
+        <p className="text-white">Missing</p>
+      }
+    </div>
   </>)
 }
 
 const Home: NextPage = () => {
-  const [state, dispatch] = useReducer(reducer, { summonerName: "", region: "" });
+  const [state, dispatch] = useReducer(reducer, { summonerName: "", region: PlatformId.NA1, playerId:null });
+  const playerIdQuery = api.matches.summonerId.useQuery({username:state.summonerName,region:state.region},{enabled:state.summonerName!==""});
+
+  const player = useMemo(()=>({playerId:playerIdQuery.data??null,region:state.region}),[state,playerIdQuery]);
 
   const { register, handleSubmit } = useForm<IFormInput>();
-  const onSubmit: SubmitHandler<IFormInput> = (data) => {
-    dispatch({ type: ActionType.SET_NAME, payload: data.summonerName });
+  const onSubmit: SubmitHandler<IFormInput> = (formInput) => {
+    dispatch({ type: ActionType.SEARCH, payload: formInput});
   };
-
 
   return (
     <>
@@ -110,9 +126,9 @@ const Home: NextPage = () => {
             <input className="px-4 py-1 text-sm text-white font-semibold rounded-full border border-purple-200 hover:text-white hover:bg-purple-600 hover:border-transparent focus:outline-none focus:ring-2 focus:ring-purple-600 focus:ring-offset-2"
               type="submit" value="See Total Deaths!" />
           </form>
-          { state.summonerName !==""?
+          { player.playerId !== null?
           <Suspense fallback={<Spinner />}>
-            <Display summonerName={state.summonerName} dispatch={dispatch} />
+            <Display player={player as Player} />
           </Suspense>: ""
           }
         </div>
