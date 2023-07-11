@@ -54,10 +54,11 @@ const Display = (props: { summonerName: string, dispatch: Dispatch<Action>}) => 
   const [data,matches] = api.matches.matches.useSuspenseQuery({username:props.summonerName,region:PlatformId.NA1});
 
   const totalDeathTime = useMemo(()=>
-    (matches?.data?.reduce((x:number,y:DeathDTO)=>x+y?.totalTimeSpentDead, 0)??0)/60, [matches]);
-
+    ((matches.data??[]).reduce((x:number,y:DeathDTO)=>x+(y?.totalTimeSpentDead??0)/60, 0)), [matches]);
+  const totalDeaths = useMemo(()=>((matches.data??[]).reduce((x:number,y:DeathDTO)=>x+y?.deaths??0,0)),[matches])
   return (<>
     <h2 className="text-white">Total Time Dead: <span className="animate-pulse text-red-400">{totalDeathTime}</span> min</h2>
+    <h2 className="text-white">Time Per Death: <span className="animate-pulse text-red-400">{totalDeathTime/totalDeaths}</span> min</h2>
     <h2 className="text-lg font-bold text-white">Group of matches</h2>
     {data?
       (<table className="table-auto border-collapse text-white text-center border-white border-spacing-2 border">
