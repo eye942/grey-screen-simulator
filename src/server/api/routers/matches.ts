@@ -44,7 +44,6 @@ const getSummoner = async (summonerName: string, region: RiotAPITypes.LoLRegion)
 }
 
 const getDeathInfo = async (matchId: string, puuid: string, cluster: RiotAPITypes.Cluster) => {
-
   try {
     const matchDTO = await RiotClient.matchV5.getMatchById({ matchId, cluster });
     const playerDTO = matchDTO.info.participants.find(player => player.puuid === puuid);
@@ -63,8 +62,6 @@ const getDeathInfo = async (matchId: string, puuid: string, cluster: RiotAPIType
     } as DeathDTO;
   } catch (e) {
     console.error(e);
-  } finally {
-    console.timeLog("getDeathInfo", matchId);
   }
   return null;
 }
@@ -74,22 +71,17 @@ const getMatchIds = async (playerId: string, region: RiotAPITypes.LoLRegion) => 
   if (!cluster) {
     return [];
   }
-  console.time("getMatches");
   try {
     const matchDTO = await RiotClient.matchV5.getIdsbyPuuid({ puuid: playerId, cluster });
 
     return matchDTO;
   } catch (e) {
     console.error(e);
-  } finally {
-    console.timeEnd("getMatches");
   }
   return [];
 }
 
 const getStats = async (playerId: string, region: RiotAPITypes.LoLRegion, matchIds: string[]) => {
-  console.time("getDeathInfo");
-
   const cluster = RegionToCluster.get(region);
   if (cluster === undefined) {
     return null;
@@ -101,8 +93,6 @@ const getStats = async (playerId: string, region: RiotAPITypes.LoLRegion, matchI
     .filter((result): result is PromiseFulfilledResult<DeathDTO | null> => result.status === "fulfilled")
     .map(result => result.value)
     .filter((result): result is DeathDTO => result !== null);
-  console.log("getDeathInfo:rejected", matchIds.length - deaths.length)
-  console.timeEnd("getDeathInfo");
   return deaths;
 }
 
@@ -123,9 +113,7 @@ export const matchRouter = createTRPCRouter({
   matches: publicProcedure
     .input(z.object({ playerId: z.string().min(1), region: z.nativeEnum(RegionEnum), matchIds: z.array(z.string()) }))
     .query(async ({ input }) => {
-      console.time("stats");
       const stats = await getStats(input.playerId, input.region, input.matchIds);
-      console.timeEnd("stats");
       return stats;
     }),
   matchIds: publicProcedure
