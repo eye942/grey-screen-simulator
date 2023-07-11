@@ -4,6 +4,7 @@ import { env } from '~/env.mjs';
 
 const config: RiotAPITypes.Config = {
     debug: false,
+
     cache: {
         cacheType: 'local', // local or ioredis
         client: null, // leave null if client is local
@@ -17,5 +18,7 @@ const config: RiotAPITypes.Config = {
     }
 }
 
+const riotClient = new RiotAPI(env.RIOT_API_KEY, config);
+riotClient.riotRateLimiter.configuration.concurrency = 1;
 
-export const RiotClient = new RiotAPI(env.RIOT_API_KEY, config);
+export const RiotClient = riotClient;
